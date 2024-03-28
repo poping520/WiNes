@@ -75,6 +75,6 @@ Cpu* cpu_create();
 
 void cpu_set_memory(Cpu* cpu, MemoryInterface* mem);
 
-void cpu_run(Cpu* cpu);
+void cpu_run(Cpu* cpu, Addr_t start_addr);
 
 #endif //WINES_CPU_H
