@@ -18,6 +18,9 @@ add_executable(
         src/cpu.h
         src/mem.c
         src/mem.h
+        src/ppu.c
+        src/ppu.h
+        src/common.h
 )
 
 
