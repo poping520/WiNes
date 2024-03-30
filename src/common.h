@@ -7,4 +7,6 @@
 
 #include <stdint.h>
 
+typedef uint16_t Addr_t;
+
 #endif //WINES_COMMON_H

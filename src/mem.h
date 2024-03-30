@@ -5,10 +5,8 @@
 #ifndef WINES_MEM_H
 #define WINES_MEM_H
 
-#include <stdint.h>
-
-typedef uint16_t Addr_t;
-
+#include "common.h"
+#include "ppu.h"
 
 typedef struct {
     uint8_t (* read)(Addr_t addr);
@@ -16,7 +14,7 @@ typedef struct {
     void (* write)(Addr_t addr, uint8_t val);
 } MemoryInterface;
 
-MemoryInterface* mem_create();
+MemoryInterface* mem_create(ppu_t* ppu);
 
 void mem_release(MemoryInterface* mem);
 

@@ -11,7 +11,7 @@
 #include <stdbool.h>
 
 
-/**
+/*
  * MOS 6502 CPU
  *
  * Architecture: 8-bit processor with a 16-bit address bus
