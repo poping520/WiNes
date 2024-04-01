@@ -6,6 +6,7 @@
 #define WINES_PPU_H
 
 #include "common.h"
+#include "mapper.h"
 
 typedef struct ppu ppu_t;
 
@@ -40,6 +41,34 @@ typedef struct ppu ppu_t;
  *      V:  Generate an NMI at the start of the vertical blanking interval
  *          (0: off; 1: on)
  *
+ * PPUMASK: $2001, write
+ *  flags:  7 -bit- 0
+ *          BGRs bMnG
+ *
+ *      G:  Greyscale
+ *          (0: normal color, 1: produce a greyscale display)
+ *
+ *      m:  1: Show background in leftmost 8 pixels of screen, 0: Hide
+ *
+ *      M:  1: Show sprites in leftmost 8 pixels of screen, 0: Hide
+ *
+ *      b:  1: Show background
+ *
+ *      s:  1: Show sprites
+ *
+ *      R:  Emphasize red (green on PAL/Dendy)
+ *
+ *      G:  Emphasize green (red on PAL/Dendy)
+ *
+ *      B:  Emphasize blue
+ *
+ * PPUSTATUS: $2002, read
+ *
+ *
+ * OAMADDR: $2003, write
+ *      Write the address of OAM you want to access here. Most games just write $00 here and then use OAMDMA.
+ *      (DMA is implemented in the 2A03/7 chip and works by repeatedly writing to OAMDATA)
+ *
  * PPUADDR: $2006, write x2
  *      Because the CPU and the PPU are on separate buses, neither has direct access to the other's memory.
  *      The CPU writes to VRAM through a pair of registers on the PPU by first loading an address into PPUADDR and then it writing data repeatedly to PPUDATA
@@ -60,13 +89,13 @@ typedef enum {
     PPUSCROLL,      // $2005 >> write x2
     PPUADDR,        // $2006 >> write x2
     PPUDATA,        // $2007 <> read/write
-    OAMDMA          // $4014 >  write
-
 } ppu_reg_t;
 
 
+uint8_t ppu_reg_read(ppu_t* ppu, ppu_reg_t reg);
+
 void ppu_reg_write(ppu_t* ppu, ppu_reg_t reg, uint8_t val);
 
-uint8_t ppu_reg_read(ppu_t* ppu, ppu_reg_t reg);
+ppu_t* ppu_create(mapper_t* mapper);
 
 #endif //WINES_PPU_H

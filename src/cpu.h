@@ -5,10 +5,7 @@
 #ifndef WINES_CPU_H
 #define WINES_CPU_H
 
-#include "mem.h"
-
-#include <stdint.h>
-#include <stdbool.h>
+#include "common.h"
 
 
 /*
@@ -39,7 +36,42 @@
  * https://en.wikipedia.org/wiki/Ricoh_2A03
  *
  */
-typedef struct Cpu Cpu;
+
+#define CPU_RAM_SIZE (2*1024)   // 2KB CPU ARM
+
+typedef struct mapper mapper_t;
+typedef struct ppu ppu_t;
+
+typedef struct cpu {
+
+    uint8_t ram[CPU_RAM_SIZE];
+
+    // Program counter
+    uint16_t pc;
+
+    // Stack pointer
+    uint8_t sp;
+
+    // Accumulator
+    uint8_t a;
+
+    // Index registers
+    uint8_t x, y;
+
+    // Status register
+    uint8_t p;
+
+    uint32_t cycles;
+
+    // Accumulator addressing mode
+    bool am_acc_flag;
+
+    bool oam_dma_flag;
+
+    uint16_t oam_dma_addr;
+
+    ppu_t* ppu;
+} cpu_t;
 
 /**
  * The processor status register has 8 bits, where 7 are used as flags:
@@ -71,10 +103,14 @@ enum CpuFlag {
 #define CPU_FLAG_SET 1
 #define CPU_FLAG_CLR 0
 
-Cpu* cpu_create();
 
-void cpu_set_memory(Cpu* cpu, MemoryInterface* mem);
+uint8_t cpu_mem_read(cpu_t* cpu, addr_t addr);
 
-void cpu_run(Cpu* cpu, Addr_t start_addr);
+void cpu_mem_write(cpu_t* cpu, addr_t addr, uint8_t val);
+
+cpu_t* cpu_create(ppu_t* ppu, mapper_t mapper);
+
+void cpu_run(cpu_t* cpu, addr_t start_addr);
+
 
 #endif //WINES_CPU_H

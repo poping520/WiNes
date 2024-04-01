@@ -3,46 +3,13 @@
 //
 
 #include "cpu.h"
+#include "mapper.h"
+
 #include <malloc.h>
+#include <stdbool.h>
 
 
-struct Cpu {
-
-    // Program counter
-    uint16_t pc;
-
-    // Stack pointer
-    uint8_t sp;
-
-    // Accumulator
-    uint8_t a;
-
-    // Index registers
-    uint8_t x, y;
-
-    // Status register
-    uint8_t p;
-
-    MemoryInterface* mem;
-
-    uint32_t cycles;
-
-    // Accumulator addressing mode
-    bool am_acc_flag;
-};
-
-Cpu* cpu_create() {
-    Cpu* cpu = calloc(1, sizeof(Cpu));
-    return cpu;
-}
-
-void cpu_set_memory(Cpu* cpu, MemoryInterface* mem) {
-    if (cpu) {
-        cpu->mem = mem;
-    }
-}
-
-inline void fn_set_flag(Cpu* cpu, enum CpuFlag flag, bool value) {
+inline void fn_set_flag(cpu_t* cpu, enum CpuFlag flag, bool value) {
     if (value) {
         // 0001 0000 & 1110 0101 -> 1111 0101
         cpu->p |= flag;
@@ -52,7 +19,7 @@ inline void fn_set_flag(Cpu* cpu, enum CpuFlag flag, bool value) {
     }
 }
 
-inline uint8_t fn_get_flag(Cpu* cpu, enum CpuFlag flag) {
+inline uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
     // 0001_0000 & 0101_0101 -> 0001_0000
     // 0001_0000 & 0100_0101 -> 0000_0000
     return (cpu->p & flag) > 0 ? CPU_FLAG_SET : CPU_FLAG_CLR;
@@ -62,9 +29,9 @@ inline uint8_t fn_get_flag(Cpu* cpu, enum CpuFlag flag) {
 
 #define ARG_CPU         cpu
 #define ARG_OP_ADDR     op_addr         // Address of operand
-#define DECL_ARG_CPU    Cpu* ARG_CPU
-#define DECL_ARG_ADDR   Addr_t ARG_OP_ADDR
-#define DECL_FUN_AM(N)  static Addr_t AM_##N(DECL_ARG_CPU)
+#define DECL_ARG_CPU    cpu_t* ARG_CPU
+#define DECL_ARG_ADDR   addr_t ARG_OP_ADDR
+#define DECL_FUN_AM(N)  static addr_t AM_##N(DECL_ARG_CPU)
 #define DECL_FUN_OP(N)  static void OP_##N(DECL_ARG_CPU, DECL_ARG_ADDR)
 
 
@@ -91,8 +58,8 @@ inline uint8_t fn_get_flag(Cpu* cpu, enum CpuFlag flag) {
 #define CYCLES (ARG_CPU->cycles)
 #define AM_ACC_FLAG (ARG_CPU->am_acc_flag)
 
-#define mem_read(addr)          ARG_CPU->mem->read(addr)
-#define mem_write(addr, val)    ARG_CPU->mem->write(addr, val)
+#define mem_read(addr)          cpu_mem_read(ARG_CPU, addr)
+#define mem_write(addr, val)    cpu_mem_write(ARG_CPU, addr, val)
 // ((high 8 bit) << 8) | (low 8 bit)
 #define mem_read16(addr)        ((mem_read(addr + 1) << 8) | mem_read(addr))
 
@@ -100,7 +67,7 @@ inline uint8_t fn_get_flag(Cpu* cpu, enum CpuFlag flag) {
 #define mem_read_op_addr()      mem_read(ARG_OP_ADDR)
 #define mem_write_op_addr(val)  mem_write(ARG_OP_ADDR, val)
 
-#define mem_push_stack(val)     mem_write((Addr_t)(SP-- + STACK_BASE), val)
+#define mem_push_stack(val)     mem_write((addr_t)(SP-- + STACK_BASE), val)
 #define mem_pop_stack()         mem_read(++SP + STACK_BASE)
 
 __forceinline uint16_t f_mem_pop_stack16(DECL_ARG_CPU) {
@@ -519,7 +486,7 @@ DECL_FUN_OP(BIT) {
  */
 
 // ADC/SBC implements
-__forceinline void adc_impl(Cpu* ARG_CPU, uint8_t operand) {
+__forceinline void adc_impl(cpu_t* ARG_CPU, uint8_t operand) {
     uint16_t sum = A + operand + get_flag(CARRY_FLAG);
     set_flag(OVERFLOW_FLAG, (~(A ^ operand) & (A ^ sum)) & 0x80);
 
@@ -554,7 +521,7 @@ DECL_FUN_OP(SBC) {
  * Carry Flag:      Set if A/X/Y >= M \n
  * Set Z, N Flags
  */
-__forceinline void cmp_impl(Cpu* ARG_CPU, uint16_t ARG_OP_ADDR, uint8_t reg_val) {
+__forceinline void cmp_impl(cpu_t* ARG_CPU, uint16_t ARG_OP_ADDR, uint8_t reg_val) {
     uint8_t operand = mem_read_op_addr();
     uint8_t result = reg_val - operand;
     set_flag(CARRY_FLAG, reg_val >= operand);
@@ -796,7 +763,7 @@ __forceinline void _branch(DECL_ARG_CPU, DECL_ARG_ADDR, bool cond) {
     if (cond) {
         ++CYCLES;
         uint8_t operand = mem_read_op_addr();
-        Addr_t new_addr = PC + operand;
+        addr_t new_addr = PC + operand;
         if (!is_same_page(PC, new_addr)) {
             ++CYCLES;
         }
@@ -914,9 +881,9 @@ DECL_FUN_OP(RTI) {
 }
 
 typedef struct {
-    void (* op_func)(Cpu* cpu, uint16_t);
+    void (* op_func)(cpu_t* cpu, uint16_t);
 
-    uint16_t (* am_func)(Cpu*);
+    uint16_t (* am_func)(cpu_t*);
 
     uint8_t cycles;
 } CpuOperation;
@@ -1181,7 +1148,7 @@ CpuOperation op_table[] = {
         {NULL, NULL}, // $FF
 };
 
-void cpu_run(Cpu* cpu, Addr_t start_addr) {
+void cpu_run(cpu_t* cpu, addr_t start_addr) {
     PC = start_addr;
 
     while (true) {
@@ -1200,4 +1167,10 @@ void cpu_run(Cpu* cpu, Addr_t start_addr) {
 
         --cpu->cycles;
     }
+}
+
+cpu_t* cpu_create(ppu_t* ppu, mapper_t* mapper) {
+    cpu_t* cpu = calloc(1, sizeof(cpu_t));
+    cpu->ppu = ppu;
+    return cpu;
 }

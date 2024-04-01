@@ -6,7 +6,22 @@
 #define WINES_COMMON_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
-typedef uint16_t Addr_t;
+typedef uint16_t addr_t;
+
+typedef int err_t;
+
+#define ERR_OK              0
+#define ERR_NULLPTR         1
+#define ERR_FILE_NOT_EXISTS 2
+#define ERR_INVALID_ROM     3
+#define ERR_NES_FORMAT      4
+
+
+void* pn_malloc(size_t size);
+
+void pn_free(void* ptr);
+
 
 #endif //WINES_COMMON_H

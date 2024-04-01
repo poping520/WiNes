@@ -14,13 +14,20 @@ include_directories(
 add_executable(
         WiNes
         src/main.c
-        src/cpu.c
-        src/cpu.h
-        src/mem.c
-        src/mem.h
-        src/ppu.c
-        src/ppu.h
         src/common.h
+        src/cpu.h
+        src/cpu.c
+        src/cpu_mem.c
+        src/ppu.h
+        src/ppu.c
+        src/cartridge.c
+        src/cartridge.h
+        src/platform.c
+        src/platform.h
+        src/common.c
+        src/mapper.c
+        src/mapper.h
+        src/popnes.c
 )
 
 

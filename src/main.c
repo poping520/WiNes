@@ -2,21 +2,17 @@
 #include <malloc.h>
 
 #include "cpu.h"
+#include "ppu.h"
+#include "cartridge.h"
 
 int main() {
 
-    struct A {
-        uint8_t a: 1;
-    };
+//    ppu_t* ppu = ppu_create();
+//    cpu_t* cpu = cpu_create(ppu);
 
-    struct A aa;
-    aa.a = ~0b0;
-    printf("%d\n", aa.a);
+    cart_t cart;
+    cart_load_rom("../test_nes/nestest.nes", &cart);
 
-//    MemoryInterface* mem = mem_create(NULL);
-//    Cpu* cpu = cpu_create();
-//    cpu_set_memory(cpu, mem);
-//
 //    FILE* f = NULL;
 //    fopen_s(&f, "../test_nes/nestest.nes", "rb");
 //    fseek(f, 0, SEEK_END);
