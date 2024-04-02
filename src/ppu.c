@@ -7,6 +7,8 @@
 // 2KB Video RAM
 #define PPU_VRAM_SIZE (2*1024)
 
+#define NTSC_SCANLINE_COUNT 262
+
 typedef union {
     struct {
         uint16_t coarse_x: 5;
@@ -17,9 +19,50 @@ typedef union {
     uint16_t addr: 15;
 } inner_reg_t;
 
+/*
+ * PPU Memory Map
+ *
+ * +------------------------------------~ $10000
+ * |                |      Mirrors      |
+ * |                |   $0000 - $3FFF   |
+ * |----------------|-------------------~ $4000
+ * |                |      Mirrors      |
+ * |                |   $3F00 - $3F1F   |
+ * |    Palettes    |-------------------~ $3F20
+ * |                |   Sprite Palette  |
+ * |                |-------------------~ $3F10
+ * |                |   Image Palette   |
+ * |----------------+-------------------~ $3F00
+ * |                |      Mirrors      |
+ * |                |   $2000 - $2EFF   |
+ * |                |-------------------~ $3000
+ * |                | Attribute Table 3 |
+ * |                |-------------------~ $2FC0
+ * |                |   Name Table 3    |
+ * |                |-------------------~ $2C00
+ * |                | Attribute Table 2 |
+ * |  Name Tables   |-------------------~ $2BC0
+ * |                |   Name Table 2    |
+ * |                |-------------------~ $2800
+ * |                | Attribute Table 1 |
+ * |                |-------------------~ $27C0
+ * |                |   Name Table 1    |
+ * |                |-------------------~ $2400
+ * |                | Attribute Table 0 |
+ * |                |-------------------~ $23C0
+ * |                |   Name Table 0    |
+ * |----------------+-------------------~ $2000
+ * |                |  Pattern Table 1  |
+ * | Pattern Tables |-------------------~ $1000
+ * |                |  Pattern Table 1  |
+ * +----------------+-------------------~ $0000
+ */
+
 struct ppu {
 
     mapper_t* mapper;
+
+    uint32_t cycles;
 
     // Video RAM
     uint8_t vram[PPU_VRAM_SIZE];
@@ -27,11 +70,17 @@ struct ppu {
     // Object Attribute Memory
     uint8_t oam[256];
 
+    uint8_t oam_addr;
+
+    //
+    // Rendering
+    //
+    uint16_t scanline;
+
+
     //
     // Memory-mapped registers
     //
-
-    uint8_t oam_addr;
 
     // Control register
     union {
@@ -95,7 +144,6 @@ struct ppu {
     uint8_t reg_w: 1;
 };
 
-
 const uint32_t DEFAULT_PALETTES[64] = {
         // 00 -- 0F
         0x626262, 0x001FB2, 0x2404C8, 0x5200B2, 0x730076, 0x800024, 0x730B00, 0x522800,
@@ -110,6 +158,42 @@ const uint32_t DEFAULT_PALETTES[64] = {
         0xFFFFFF, 0xB6E1FF, 0xCED1FF, 0xE9C3FF, 0xFFBCFF, 0xFFBDF4, 0xFFC6C3, 0xFFD59A,
         0xE9E681, 0xCEF481, 0xB6FB9A, 0xA9FAC3, 0xA9F0F4, 0xB8B8B8, 0x000000, 0x000000,
 };
+
+
+#define ARG_PPU         ppu
+#define DECL_ARG_PPU    ppu_t* ARG_PPU
+
+#define SCANLINE        (ARG_PPU->scanline)
+
+#define ppu_read(addr)          mapper_ppu_read(ARG_PPU->mapper, addr)
+#define ppu_write(addr, val)    mapper_ppu_write(ARG_PPU->mapper, addr, val)
+
+uint32_t ppu_render(DECL_ARG_PPU) {
+
+    if (ppu->mask.show_bgr) {
+        uint8_t tile_idx = ppu_read(ppu->reg_v.addr);
+    }
+}
+
+/*
+ * DOC:
+ * https://austinmorlan.com/posts/nes_rendering_overview/
+ */
+void ppu_cycle(ppu_t* ppu) {
+
+    uint16_t cur_scanline = ppu->scanline;
+
+    if (cur_scanline < 240) {
+        // scanline 0-239
+
+        ppu_render(ppu);
+    }
+
+    ++ppu->scanline;
+    if (ppu->scanline > NTSC_SCANLINE_COUNT) {
+        ppu->scanline = 0;
+    }
+}
 
 
 uint8_t ppu_reg_read(ppu_t* ppu, ppu_reg_t reg) {
@@ -221,11 +305,6 @@ void ppu_reg_write(ppu_t* ppu, ppu_reg_t reg, uint8_t val) {
             // not support
             break;
     }
-}
-
-
-void ppu_cycle(ppu_t* ppu) {
-
 }
 
 ppu_t* ppu_create(mapper_t* mapper) {

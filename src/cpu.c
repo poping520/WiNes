@@ -1130,7 +1130,7 @@ CpuOperation op_table[] = {
         {OP_SBC, AM_ZP,  3}, // $E5
         {OP_INC, AM_ZP,  5}, // $E6
         {NULL, NULL}, // $E7
-        {OP_INX, AM_IMP}, // $E8
+        {OP_INX, AM_IMP, 2}, // $E8
         {OP_SBC, AM_IMM, 2}, // $E9
         {OP_NOP, AM_IMP, 1},  // $EA
         {NULL, NULL}, // $EB
@@ -1164,6 +1164,8 @@ void cpu_reset(cpu_t* cpu) {
     PC = mem_read16(VECTOR_RESET);
 }
 
+#include <stdio.h>
+
 void cpu_cycle(cpu_t* cpu) {
     if (cpu->cycles == 0) {
 
@@ -1174,6 +1176,7 @@ void cpu_cycle(cpu_t* cpu) {
             cpu->cycles += operation.cycles;
             uint8_t op_addr = operation.am_func(cpu);
             operation.op_func(cpu, op_addr);
+            printf_s("opcode: %d\n", opcode);
         }
     }
 

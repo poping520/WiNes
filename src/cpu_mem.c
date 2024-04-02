@@ -38,7 +38,6 @@
  */
 
 uint8_t cpu_mem_read(cpu_t* cpu, addr_t addr) {
-
     if (addr < 0x2000) { // CPU RAM
         if (addr > 0x7FF) { // Mirrors
             addr = addr % 800;

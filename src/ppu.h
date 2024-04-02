@@ -94,11 +94,11 @@ typedef enum {
 
 typedef struct ppu ppu_t;
 
+void ppu_cycle(ppu_t* ppu);
+
 uint8_t ppu_reg_read(ppu_t* ppu, ppu_reg_t reg);
 
 void ppu_reg_write(ppu_t* ppu, ppu_reg_t reg, uint8_t val);
-
-void ppu_cycle(ppu_t* ppu);
 
 ppu_t* ppu_create(mapper_t* mapper);
 

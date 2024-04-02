@@ -1,7 +1,7 @@
 
 
-int main() {
+void pop_nes_init();
 
-    void pop_nes_init();
+int main() {
     pop_nes_init();
 }

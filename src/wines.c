@@ -22,6 +22,6 @@ void pop_nes_init() {
         ppu_cycle(ppu);
         ppu_cycle(ppu);
         ppu_cycle(ppu);
-        wn_msleep(500);
+        wn_msleep(5);
     }
 }
