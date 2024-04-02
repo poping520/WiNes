@@ -9,44 +9,48 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 
+#include <Windows.h>
 #include <io.h>
 
 #define ACCESS _access
 #define F_OK 0
+#define MSLEEP(MS) Sleep(MS)
 
 #else
 
 #include <unistd.h>
+
+#define MSLEEP(MS) usleep(MS*1000)
 #define ACCESS access
 
 #endif
 
 
-static size_t file_read(file_t* file, void* out_data, size_t size) {
-    return fread(out_data, 1, size, file->handle);
+static size_t file_read(wn_file_t* this, void* out_data, size_t size) {
+    return fread(out_data, 1, size, this->handle);
 }
 
-static size_t file_write(file_t* file, const void* in_data, size_t size) {
-    return fwrite(in_data, 1, size, file->handle);
+static size_t file_write(wn_file_t* this, const void* in_data, size_t size) {
+    return fwrite(in_data, 1, size, this->handle);
 }
 
-static void file_seek(file_t* file, long offset, int whence) {
-    fseek(file->handle, offset, whence);
+static void file_seek(wn_file_t* this, long offset, int whence) {
+    fseek(this->handle, offset, whence);
 }
 
-static void file_close(file_t* file) {
-    fclose(file->handle);
-    free(file);
+static void file_close(wn_file_t* this) {
+    fclose(this->handle);
+    free(this);
 }
 
-file_t* open_file(const char* filename, const char* mode) {
+wn_file_t* open_file(const char* filename, const char* mode) {
     FILE* file;
 #if defined(_WIN32) || defined(_WIN64)
     fopen_s(&file, filename, mode);
 #else
     file = fopen(filename, mode);
 #endif
-    file_t* ret = malloc(sizeof(file_t));
+    wn_file_t* ret = malloc(sizeof(wn_file_t));
 
     ret->handle = file;
     ret->read = file_read;
@@ -62,4 +66,8 @@ bool file_exists(const char* filename) {
         return false;
     }
     return ACCESS(filename, F_OK) != -1;
+}
+
+void wn_msleep(long millisecond) {
+    MSLEEP(millisecond);
 }

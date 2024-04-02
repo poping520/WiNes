@@ -43,6 +43,7 @@ typedef struct nes_header {
 } nes_header_t;
 
 typedef struct cart {
+    nes_header_t header;
     uint32_t pgr_size;
     uint32_t chr_size;
     uint8_t* pgr_rom;

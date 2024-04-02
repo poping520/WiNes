@@ -71,6 +71,8 @@ typedef struct cpu {
     uint16_t oam_dma_addr;
 
     ppu_t* ppu;
+
+    mapper_t* mapper;
 } cpu_t;
 
 /**
@@ -100,17 +102,14 @@ enum CpuFlag {
     NEGATIVE_FLAG = 1 << 7
 };
 
-#define CPU_FLAG_SET 1
-#define CPU_FLAG_CLR 0
-
 
 uint8_t cpu_mem_read(cpu_t* cpu, addr_t addr);
 
 void cpu_mem_write(cpu_t* cpu, addr_t addr, uint8_t val);
 
-cpu_t* cpu_create(ppu_t* ppu, mapper_t mapper);
+cpu_t* cpu_create(ppu_t* ppu, mapper_t* mapper);
 
-void cpu_run(cpu_t* cpu, addr_t start_addr);
+void cpu_cycle(cpu_t* cpu);
 
 
 #endif //WINES_CPU_H

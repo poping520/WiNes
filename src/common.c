@@ -4,11 +4,15 @@
 
 #include <malloc.h>
 
-void* pn_malloc(size_t size) {
+void* wn_malloc(size_t size) {
     return malloc(size);
 }
 
-void pn_free(void* ptr) {
+void* wn_calloc(size_t size) {
+    return calloc(1, size);
+}
+
+void wn_free(void* ptr) {
     if (ptr != NULL) {
         free(ptr);
         ptr = NULL;

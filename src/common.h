@@ -19,9 +19,11 @@ typedef int err_t;
 #define ERR_NES_FORMAT      4
 
 
-void* pn_malloc(size_t size);
+void* wn_malloc(size_t size);
 
-void pn_free(void* ptr);
+void* wn_calloc(size_t size);
+
+void wn_free(void* ptr);
 
 
 #endif //WINES_COMMON_H

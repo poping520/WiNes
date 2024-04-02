@@ -8,8 +8,6 @@
 #include "common.h"
 #include "mapper.h"
 
-typedef struct ppu ppu_t;
-
 /*
  * The PPU exposes eight memory-mapped registers to the CPU.
  *
@@ -69,6 +67,8 @@ typedef struct ppu ppu_t;
  *      Write the address of OAM you want to access here. Most games just write $00 here and then use OAMDMA.
  *      (DMA is implemented in the 2A03/7 chip and works by repeatedly writing to OAMDATA)
  *
+ * PPUSCROLL: $2005, write x2
+ *
  * PPUADDR: $2006, write x2
  *      Because the CPU and the PPU are on separate buses, neither has direct access to the other's memory.
  *      The CPU writes to VRAM through a pair of registers on the PPU by first loading an address into PPUADDR and then it writing data repeatedly to PPUDATA
@@ -92,10 +92,16 @@ typedef enum {
 } ppu_reg_t;
 
 
+typedef struct ppu ppu_t;
+
 uint8_t ppu_reg_read(ppu_t* ppu, ppu_reg_t reg);
 
 void ppu_reg_write(ppu_t* ppu, ppu_reg_t reg, uint8_t val);
 
+void ppu_cycle(ppu_t* ppu);
+
 ppu_t* ppu_create(mapper_t* mapper);
+
+void ppu_destroy(ppu_t* ppu);
 
 #endif //WINES_PPU_H

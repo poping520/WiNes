@@ -46,10 +46,13 @@ uint8_t cpu_mem_read(cpu_t* cpu, addr_t addr) {
         return cpu->ram[addr];
     } else if (addr < 0x4000) { // PPU registers
         return ppu_reg_read(cpu->ppu, (ppu_reg_t) addr % 8);
-    } else if (addr < 0xFFFF) {
+    } else if (addr < 0x4020) {
 
+    } else if (addr < 0x8000) {
+
+    } else if (addr <= 0xFFFF) { // [0x8000, 0xFFFF]
+        return mapper_cpu_read(cpu->mapper, addr - 0x8000);
     }
-
     return 0;
 }
 
@@ -67,6 +70,8 @@ void cpu_mem_write(cpu_t* cpu, addr_t addr, uint8_t val) {
             cpu->oam_dma_flag = true;
             cpu->oam_dma_addr = val << 8;
         }
+    } else if (addr <= 0xFFFF) {
+        mapper_cpu_write(cpu->mapper, addr, val);
     }
 }
 

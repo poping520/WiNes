@@ -4,12 +4,22 @@
 
 #include "ppu.h"
 
-#include <malloc.h>
-
 // 2KB Video RAM
 #define PPU_VRAM_SIZE (2*1024)
 
+typedef union {
+    struct {
+        uint16_t coarse_x: 5;
+        uint16_t coarse_y: 5;
+        uint8_t nametable_select: 2;
+        uint8_t find_y: 3;
+    };
+    uint16_t addr: 15;
+} inner_reg_t;
+
 struct ppu {
+
+    mapper_t* mapper;
 
     // Video RAM
     uint8_t vram[PPU_VRAM_SIZE];
@@ -20,7 +30,6 @@ struct ppu {
     //
     // Memory-mapped registers
     //
-    uint16_t vram_addr;
 
     uint8_t oam_addr;
 
@@ -64,17 +73,26 @@ struct ppu {
         uint8_t val;
     } status;
 
-    mapper_t* mapper;
-
     //
     // Internal registers
     //
 
+    // Current VRAM address (15 bits)
+    inner_reg_t reg_v;
+
+    // Temporary VRAM address (15 bits); can also be thought of as the address of the top left onscreen tile.
+    inner_reg_t reg_t;
+
+    // Fine X scroll (3 bits)
+    uint8_t reg_x: 3;
+
     /*
+     * First or second write toggle (1 bit)
+     *
      * Toggles on each write to either PPUSCROLL or PPUADDR, indicating whether this is the first or second write.
      * Clears on reads of PPUSTATUS. Sometimes called the 'write latch' or 'write toggle'.
      */
-    uint8_t write_latch: 1;
+    uint8_t reg_w: 1;
 };
 
 
@@ -93,14 +111,6 @@ const uint32_t DEFAULT_PALETTES[64] = {
         0xE9E681, 0xCEF481, 0xB6FB9A, 0xA9FAC3, 0xA9F0F4, 0xB8B8B8, 0x000000, 0x000000,
 };
 
-uint8_t ppu_read(ppu_t* ppu) {
-
-}
-
-void ppu_write(ppu_t* ppu, uint8_t val) {
-
-}
-
 
 uint8_t ppu_reg_read(ppu_t* ppu, ppu_reg_t reg) {
     switch (reg) {
@@ -109,7 +119,7 @@ uint8_t ppu_reg_read(ppu_t* ppu, ppu_reg_t reg) {
             // Reading the status register will clear bit 7 mentioned above
             // and also the address latch used by PPUSCROLL and PPUADDR.
             ppu->status.vblank_has_started = 0;
-            ppu->write_latch = 0;
+            ppu->reg_w = 0;
             return ret;
         }
 
@@ -120,8 +130,8 @@ uint8_t ppu_reg_read(ppu_t* ppu, ppu_reg_t reg) {
         case PPUDATA: { // $2007:
             // VRAM read/write data register.
             // After access, the video memory address will increment by an amount determined by bit 2 of $2000.
-            uint8_t ret = ppu_read(ppu);
-            ppu->vram_addr += ppu->ctrl.vram_addr_increment ? 32 : 0;
+            uint8_t ret = mapper_ppu_read(ppu->mapper, ppu->reg_v.addr);
+            ppu->reg_v.addr += ppu->ctrl.vram_addr_increment ? 32 : 0;
             return ret;
         }
         default:
@@ -134,6 +144,9 @@ void ppu_reg_write(ppu_t* ppu, ppu_reg_t reg, uint8_t val) {
     switch (reg) {
         case PPUCTRL: // $2000
             ppu->ctrl.val = val;
+            //    yyy NN YYYYY XXXXX
+            // t: ... GH ..... .....  <- d: ......GH
+            ppu->reg_t.nametable_select = val & 0b11;
             break;
 
         case PPUMASK: // $2001
@@ -149,25 +162,59 @@ void ppu_reg_write(ppu_t* ppu, ppu_reg_t reg, uint8_t val) {
             ++ppu->oam_addr;
             break;
 
-        case PPUADDR: // $2006
-            if (~ppu->write_latch) {
-                // Write upper byte first (w is 0)
-                // Clear high 8-bits first
-                // Clear 'val' high 2-bits, cause ppu has 16KB address space only ($0000 - $3FFF)
-                ppu->vram_addr = (ppu->vram_addr & 0x00FF) | ((val & 0b001111) << 8);
-                ppu->write_latch = 0b1;
+        case PPUSCROLL: // $2005
+            if (ppu->reg_w == 0) {
+                // w is 0
+
+                //    yyy NN YYYYY XXXXX
+                // t: .... .. .... ABCDE <- d: ABCDE...
+                // x:                FGH <- d: .....FGH
+                // w:                    <- 1
+                ppu->reg_t.coarse_x = val >> 3;
+                ppu->reg_x = val & 0b111;
+                ppu->reg_w = 1;
             } else {
-                // Second write (w is 1), clear low 8-bits first
-                ppu->vram_addr = (ppu->vram_addr & 0xFF00) | val;
-                ppu->write_latch = 0b0;
+                // w is 1
+
+                //    yyy NN YYYYY XXXXX
+                // t: FGH .. ABCDE ..... <- d: ABCDEFGH
+                // w:                    <- 0
+                ppu->reg_t.find_y = val & 0b111;
+                ppu->reg_t.coarse_y = val >> 3;
+                ppu->reg_w = 0;
+            }
+            break;
+
+        case PPUADDR: // $2006
+            if (ppu->reg_w == 0) {
+                // w is 0
+
+                // t: .CDEFGH ........ <- d: ..CDEFGH
+                //        <unused>     <- d: AB......
+                // t: Z...... ........ <- 0 (bit Z is cleared)
+                // w:                  <- 1
+                ppu->reg_t.addr &= ~(0x3F << 8); // Clear 8-13 bit
+                ppu->reg_t.addr |= (val & 0x3F) << 8; // Set 8-13 bit
+                ppu->reg_t.addr &= ~(1 << 14); // Clear bit Z
+                ppu->reg_w = 1;
+            } else {
+                // w is 1
+
+                // t: ....... ABCDEFGH <- d: ABCDEFGH
+                // v: <...all bits...> <- t: <...all bits...>
+                // w:                  <- 0
+                ppu->reg_t.addr &= ~0xFF; // Clear 0-7 bit
+                ppu->reg_t.addr |= val; // Set 0-7 bit
+                ppu->reg_v.addr = ppu->reg_t.addr;
+                ppu->reg_w = 0;
             }
             break;
 
         case PPUDATA: // $2007
             // VRAM read/write data register.
             // After access, the video memory address will increment by an amount determined by bit 2 of $2000.
-            ppu_write(ppu, val);
-            ppu->vram_addr += ppu->ctrl.vram_addr_increment ? 32 : 0;
+            mapper_ppu_write(ppu->mapper, ppu->reg_v.addr, val);
+            ppu->reg_v.addr += ppu->ctrl.vram_addr_increment ? 32 : 0;
             break;
 
         default:
@@ -177,8 +224,12 @@ void ppu_reg_write(ppu_t* ppu, ppu_reg_t reg, uint8_t val) {
 }
 
 
+void ppu_cycle(ppu_t* ppu) {
+
+}
+
 ppu_t* ppu_create(mapper_t* mapper) {
-    ppu_t* ppu = calloc(1, sizeof(ppu_t));
+    ppu_t* ppu = wn_calloc(sizeof(ppu_t));
     ppu->mapper = mapper;
     return ppu;
 }

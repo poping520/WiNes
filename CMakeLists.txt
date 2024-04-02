@@ -27,7 +27,8 @@ add_executable(
         src/common.c
         src/mapper.c
         src/mapper.h
-        src/popnes.c
+        src/wines.c
+        src/mappers/mapper0_nrom.h
 )
 
 

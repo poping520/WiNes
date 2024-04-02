@@ -9,6 +9,16 @@
 #include <stdbool.h>
 
 
+#define STACK_BASE      0x100
+
+// Non-Maskable Interrupt
+#define VECTOR_NIM      0xFFFA
+#define VECTOR_RESET    0xFFFC
+#define VECTOR_IQR      0xFFFE
+
+#define CPU_FLAG_SET 1
+#define CPU_FLAG_CLR 0
+
 inline void fn_set_flag(cpu_t* cpu, enum CpuFlag flag, bool value) {
     if (value) {
         // 0001 0000 & 1110 0101 -> 1111 0101
@@ -25,7 +35,6 @@ inline uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
     return (cpu->p & flag) > 0 ? CPU_FLAG_SET : CPU_FLAG_CLR;
 }
 
-#define STACK_BASE 0x100
 
 #define ARG_CPU         cpu
 #define ARG_OP_ADDR     op_addr         // Address of operand
@@ -33,7 +42,6 @@ inline uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
 #define DECL_ARG_ADDR   addr_t ARG_OP_ADDR
 #define DECL_FUN_AM(N)  static addr_t AM_##N(DECL_ARG_CPU)
 #define DECL_FUN_OP(N)  static void OP_##N(DECL_ARG_CPU, DECL_ARG_ADDR)
-
 
 #define set_flag(flag, val) fn_set_flag(ARG_CPU, flag, val)
 #define get_flag(flag)      fn_get_flag(ARG_CPU, flag)
@@ -1148,29 +1156,35 @@ CpuOperation op_table[] = {
         {NULL, NULL}, // $FF
 };
 
-void cpu_run(cpu_t* cpu, addr_t start_addr) {
-    PC = start_addr;
+void cpu_reset(cpu_t* cpu) {
+    A = 0;
+    X = 0;
+    Y = 0;
+    SP = 0xFD;
+    PC = mem_read16(VECTOR_RESET);
+}
 
-    while (true) {
+void cpu_cycle(cpu_t* cpu) {
+    if (cpu->cycles == 0) {
 
-        if (cpu->cycles == 0) {
+        uint8_t opcode = mem_read(PC++);
+        CpuOperation operation = op_table[opcode];
 
-            uint8_t opcode = mem_read(PC++);
-            CpuOperation operation = op_table[opcode];
-
-            if (operation.am_func) {
-                cpu->cycles += operation.cycles;
-                uint8_t op_addr = operation.am_func(cpu);
-                operation.op_func(cpu, op_addr);
-            }
+        if (operation.am_func) {
+            cpu->cycles += operation.cycles;
+            uint8_t op_addr = operation.am_func(cpu);
+            operation.op_func(cpu, op_addr);
         }
-
-        --cpu->cycles;
     }
+
+    --cpu->cycles;
 }
 
 cpu_t* cpu_create(ppu_t* ppu, mapper_t* mapper) {
     cpu_t* cpu = calloc(1, sizeof(cpu_t));
     cpu->ppu = ppu;
+    cpu->mapper = mapper;
+
+    cpu_reset(cpu);
     return cpu;
 }

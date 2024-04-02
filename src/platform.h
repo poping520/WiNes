@@ -8,21 +8,25 @@
 #include "common.h"
 
 
-typedef struct file {
+typedef struct wn_file wn_file_t;
 
-    size_t (* read)(struct file* f, void* out_data, size_t size);
+struct wn_file {
 
-    size_t (* write)(struct file* f, const void* in_data, size_t size);
+    size_t (* read)(wn_file_t* this, void* out_data, size_t size);
 
-    void (* seek)(struct file* f, long offset, int whence);
+    size_t (* write)(wn_file_t* this, const void* in_data, size_t size);
 
-    void (* close)(struct file* f);
+    void (* seek)(wn_file_t* this, long offset, int whence);
+
+    void (* close)(wn_file_t* this);
 
     void* handle;
-} file_t;
+};
 
-file_t* open_file(const char* filename, const char* mode);
+wn_file_t* open_file(const char* filename, const char* mode);
 
 bool file_exists(const char* filename);
+
+void wn_msleep(long millisecond);
 
 #endif //WINES_PLATFORM_H
