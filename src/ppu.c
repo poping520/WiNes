@@ -66,6 +66,8 @@ const uint32_t DEFAULT_PALETTES[64] = {
 #define ppu_read(addr)          mapper_ppu_read(ARG_PPU->mapper, addr)
 #define ppu_write(addr, val)    mapper_ppu_write(ARG_PPU->mapper, addr, val)
 
+#define is_ppu_render()         (ppu->mask.show_bgr || ppu->mask.show_spr)
+
 uint32_t ppu_render(DECL_ARG_PPU) {
 
     if (ppu->mask.show_bgr) {
@@ -81,18 +83,37 @@ uint32_t ppu_render(DECL_ARG_PPU) {
  *
  * Visible scanlines (0-239)
  *
+ *
  * Post-render scanline (240)
  *
  * Vertical blanking lines (241-260)
  *
  * DOC:
  * https://austinmorlan.com/posts/nes_rendering_overview/
+ * https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
  */
 void ppu_cycle(ppu_t* ppu) {
 
     int16_t scanline = ppu->scanline;
+    if (scanline == -1) {
+        // Pre-render
 
-    if (scanline >= 0 && scanline <= 239) {
+        // Clear: VBlank, Sprite 0, Overflow
+        if (ppu->tick == 1) {
+            ppu->status.vblank_started = BIT_FLAG_CLR;
+            ppu->status.sprite_0_hit = BIT_FLAG_CLR;
+            ppu->status.sprite_overflow = BIT_FLAG_CLR;
+        }
+
+        // vert(v) = vert(t) each tick
+        if (ppu->tick >= 280 && ppu->tick <= 304) {
+            if (is_ppu_render()) {
+                ppu->reg_v.coarse_y = ppu->reg_t.coarse_y;
+                ppu->reg_v.fine_y = ppu->reg_t.fine_y;
+            }
+        }
+
+    } else if (scanline >= 0 && scanline <= 239) {
         // [0, 239]
 
         ppu_render(ppu);
@@ -189,7 +210,7 @@ void ppu_reg_write(ppu_t* ppu, ppu_reg_t reg, uint8_t val) {
                 //    yyy NN YYYYY XXXXX
                 // t: FGH .. ABCDE ..... <- d: ABCDEFGH
                 // w:                    <- 0
-                ppu->reg_t.find_y = val & 0b111;
+                ppu->reg_t.fine_y = val & 0b111;
                 ppu->reg_t.coarse_y = val >> 3;
                 ppu->reg_w = 0;
             }

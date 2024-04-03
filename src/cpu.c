@@ -73,6 +73,8 @@ __forceinline uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
 // ((high 8 bit) << 8) | (low 8 bit)
 #define mem_read16(addr)        ((mem_read(addr + 1) << 8) | mem_read(addr))
 
+#define mem_read_pc()           mem_read(PC++)
+
 // Read/Write operand address of instruction
 #define mem_read_op_addr()      mem_read(ARG_OP_ADDR)
 #define mem_write_op_addr(val)  mem_write(ARG_OP_ADDR, val)
@@ -151,8 +153,8 @@ DECL_FUN_AM(IMM) {
  * LDA   $12    ;将 $0012 地址处的值加载到 A
  */
 DECL_FUN_AM(ZP) {
-    addr_t addr = mem_read(PC++);
-    return addr;
+    addr_t zp_addr = mem_read_pc();
+    return zp_addr;
 }
 
 /**
@@ -165,14 +167,14 @@ DECL_FUN_AM(ZP) {
 DECL_FUN_AM(ZPX) {
     // The address calculation wraps around if the sum of the base address and the register exceed $FF
     // Using 8 bit save result
-    addr_t addr = mem_read(PC++) + X;
-    return addr;
+    addr_t zpx_addr = mem_read_pc() + X;
+    return zpx_addr;
 }
 
 DECL_FUN_AM(ZPY) {
     // Using 8 bit save result
-    addr_t addr = mem_read(PC++) + Y;
-    return addr;
+    addr_t zpy_addr = mem_read_pc() + Y;
+    return zpy_addr;
 }
 
 /**
@@ -206,9 +208,9 @@ DECL_FUN_AM(IND) {
  * LDA ($40,X)     ;Load a byte indirectly from memory
  */
 DECL_FUN_AM(IZX) {
-    uint8_t a_addr = mem_read(PC) + X;
-    ++PC;
-    return mem_read16(a_addr);
+    addr_t zp_addr = mem_read_pc();
+    addr_t addr_x = zp_addr + X;
+    return mem_read16(addr_x);
 }
 
 /**
@@ -221,7 +223,8 @@ DECL_FUN_AM(IZX) {
  * LDA ($40),Y     ;Load a byte indirectly from memory
  */
 DECL_FUN_AM(IZY) {
-    addr_t addr = mem_read16(mem_read(PC));
+    addr_t zp_addr = mem_read_pc();
+    addr_t addr = mem_read16(zp_addr);
     addr_t addr_y = addr + Y;
     if (!is_same_page(addr, addr_y)) {
         ++CYCLES;
@@ -278,7 +281,7 @@ DECL_FUN_AM(ABY) {
  * BEQ   $12
  */
 DECL_FUN_AM(REL) {
-    int8_t offset = mem_read(PC++);
+    int8_t offset = mem_read_pc();
     // Branch addr
     return PC + offset;
 }
@@ -739,7 +742,7 @@ DECL_FUN_OP(JMP) {
 /*
  * JSR - Jump to Subroutine
  *
- * 将返回地址（减一）压入堆栈，然后将 PC 设置为目标内存地址。
+ * 将返回地址（PC - 1）压栈，然后将 PC 设置为目标内存地址。
  */
 DECL_FUN_OP(JSR) {
     addr_t return_addr = PC - 1;
@@ -1105,7 +1108,7 @@ CpuOperation op_table[] = {
         {OP_CMP, AM_ZP,  3}, // $C5
         {OP_DEC, AM_ZP,  5}, // $C6
         {NULL, NULL}, // $C7
-        {OP_INY, AM_IMP}, // $C8
+        {OP_INY, AM_IMP, 2}, // $C8
         {OP_CMP, AM_IMM, 2}, // $C9
         {OP_DEX, AM_IMP, 2}, // $CA
         {NULL, NULL}, // $CB
@@ -1194,11 +1197,8 @@ void cpu_cycle(cpu_t* cpu) {
             cpu_interrupt_nmi(cpu);
         }
 
-        uint8_t opcode = mem_read(PC++);
+        uint8_t opcode = mem_read_pc();
         printf_s("opcode: %d, pc: %#x, cycle_count: %lld\n", opcode, PC, cycle_count);
-        if (cycle_count >= 102203) {
-            int brk = 0;
-        }
         CpuOperation operation = op_table[opcode];
         if (operation.am_func) {
             cpu->cycles += operation.cycles;

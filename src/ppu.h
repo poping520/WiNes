@@ -104,7 +104,7 @@ typedef union {
         uint16_t coarse_x: 5;
         uint16_t coarse_y: 5;
         uint8_t nametable_select: 2;
-        uint8_t find_y: 3;
+        uint8_t fine_y: 3;
     };
     uint16_t addr: 15;
 } inner_reg_t;
@@ -167,8 +167,8 @@ struct ppu {
     union {
         struct {
             uint8_t open_bus: 5;
-            uint8_t spr_overflow: 1;
-            uint8_t spr_0_hit: 1;
+            uint8_t sprite_overflow: 1;
+            uint8_t sprite_0_hit: 1;
             uint8_t vblank_started: 1;
         };
         uint8_t val;
