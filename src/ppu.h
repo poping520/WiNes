@@ -8,6 +8,9 @@
 #include "common.h"
 #include "mapper.h"
 
+// 2KB Video RAM
+#define PPU_VRAM_SIZE (2*1024)
+
 /*
  * The PPU exposes eight memory-mapped registers to the CPU.
  *
@@ -92,7 +95,106 @@ typedef enum {
 } ppu_reg_t;
 
 
+typedef struct cpu cpu_t;
+
 typedef struct ppu ppu_t;
+
+typedef union {
+    struct {
+        uint16_t coarse_x: 5;
+        uint16_t coarse_y: 5;
+        uint8_t nametable_select: 2;
+        uint8_t find_y: 3;
+    };
+    uint16_t addr: 15;
+} inner_reg_t;
+
+struct ppu {
+
+    cpu_t* cpu;
+
+    mapper_t* mapper;
+
+    // Video RAM
+    uint8_t vram[PPU_VRAM_SIZE];
+
+    // Object Attribute Memory
+    uint8_t oam[256];
+
+    uint8_t oam_addr;
+
+    //
+    // Rendering
+    //
+    int16_t scanline;
+
+    uint32_t tick;
+
+    //
+    // Memory-mapped registers
+    //
+
+    // Control register
+    union {
+        struct {
+            uint8_t nametable_addr: 2;
+            uint8_t vram_addr_increment: 1;
+            uint8_t a1: 1;
+            uint8_t a2: 1;
+            uint8_t a3: 1;
+            uint8_t sprite_size: 1;
+            uint8_t a4: 1;
+            uint8_t nmi_enable: 1;
+        };
+        uint8_t val;
+    } ctrl;
+
+    // Mask register
+    union {
+        struct {
+            uint8_t greyscale: 1;
+            uint8_t show_bgr_left8: 1;
+            uint8_t show_spr_left8: 1;
+            uint8_t show_bgr: 1;
+            uint8_t show_spr: 1;
+            uint8_t emphasize_red: 1;
+            uint8_t emphasize_green: 1;
+            uint8_t emphasize_blue: 1;
+        };
+        uint8_t val;
+    } mask;
+
+    union {
+        struct {
+            uint8_t open_bus: 5;
+            uint8_t spr_overflow: 1;
+            uint8_t spr_0_hit: 1;
+            uint8_t vblank_started: 1;
+        };
+        uint8_t val;
+    } status;
+
+    //
+    // Internal registers
+    //
+
+    // Current VRAM address (15 bits)
+    inner_reg_t reg_v;
+
+    // Temporary VRAM address (15 bits); can also be thought of as the address of the top left onscreen tile.
+    inner_reg_t reg_t;
+
+    // Fine X scroll (3 bits)
+    uint8_t reg_x: 3;
+
+    /*
+     * First or second write toggle (1 bit)
+     *
+     * Toggles on each write to either PPUSCROLL or PPUADDR, indicating whether this is the first or second write.
+     * Clears on reads of PPUSTATUS. Sometimes called the 'write latch' or 'write toggle'.
+     */
+    uint8_t reg_w: 1;
+};
 
 void ppu_cycle(ppu_t* ppu);
 

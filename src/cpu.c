@@ -4,6 +4,7 @@
 
 #include "cpu.h"
 #include "mapper.h"
+#include "ppu.h"
 
 #include <malloc.h>
 #include <stdbool.h>
@@ -19,7 +20,7 @@
 #define CPU_FLAG_SET 1
 #define CPU_FLAG_CLR 0
 
-inline void fn_set_flag(cpu_t* cpu, enum CpuFlag flag, bool value) {
+__forceinline void fn_set_flag(cpu_t* cpu, enum CpuFlag flag, bool value) {
     if (value) {
         // 0001 0000 & 1110 0101 -> 1111 0101
         cpu->p |= flag;
@@ -29,7 +30,7 @@ inline void fn_set_flag(cpu_t* cpu, enum CpuFlag flag, bool value) {
     }
 }
 
-inline uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
+__forceinline uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
     // 0001_0000 & 0101_0101 -> 0001_0000
     // 0001_0000 & 0100_0101 -> 0000_0000
     return (cpu->p & flag) > 0 ? CPU_FLAG_SET : CPU_FLAG_CLR;
@@ -57,14 +58,15 @@ inline uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
     set_flag(NEGATIVE_FLAG, ((val) >> 7) & 0b1)
 
 
-#define PC (ARG_CPU->pc)
-#define SP (ARG_CPU->sp)
-#define A  (ARG_CPU->a)
-#define X  (ARG_CPU->x)
-#define Y  (ARG_CPU->y)
-#define P (ARG_CPU->p)
-#define CYCLES (ARG_CPU->cycles)
+#define PC          (ARG_CPU->pc)
+#define SP          (ARG_CPU->sp)
+#define A           (ARG_CPU->a)
+#define X           (ARG_CPU->x)
+#define Y           (ARG_CPU->y)
+#define P           (ARG_CPU->p)
+#define CYCLES      (ARG_CPU->cycles)
 #define AM_ACC_FLAG (ARG_CPU->am_acc_flag)
+
 
 #define mem_read(addr)          cpu_mem_read(ARG_CPU, addr)
 #define mem_write(addr, val)    cpu_mem_write(ARG_CPU, addr, val)
@@ -76,21 +78,21 @@ inline uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
 #define mem_write_op_addr(val)  mem_write(ARG_OP_ADDR, val)
 
 #define mem_push_stack(val)     mem_write((addr_t)(SP-- + STACK_BASE), val)
-#define mem_pop_stack()         mem_read(++SP + STACK_BASE)
+#define mem_pop_stack()         mem_read((addr_t)(++SP + STACK_BASE))
 
-__forceinline uint16_t f_mem_pop_stack16(DECL_ARG_CPU) {
+__forceinline void fn_mem_push_stack16(DECL_ARG_CPU, uint16_t val) {
+    mem_push_stack((uint8_t) (val >> 8));
+    mem_push_stack((uint8_t) val);
+}
+
+__forceinline uint16_t fn_mem_pop_stack16(DECL_ARG_CPU) {
     uint16_t low = mem_pop_stack();
     uint16_t high = mem_pop_stack();
     return (high << 8) | low;
 }
 
-__forceinline void f_mem_push_stack16(DECL_ARG_CPU, uint16_t val) {
-    mem_push_stack((uint8_t) (val >> 8));
-    mem_push_stack((uint8_t) val);
-}
-
-#define mem_push_stack16(val)   f_mem_push_stack16(ARG_CPU, val)
-#define mem_pop_stack16()       f_mem_pop_stack16(ARG_CPU)
+#define mem_push_stack16(val)   fn_mem_push_stack16(ARG_CPU, val)
+#define mem_pop_stack16()       fn_mem_pop_stack16(ARG_CPU)
 
 /*
  * Memory max offset: 0xFFFF
@@ -141,12 +143,16 @@ DECL_FUN_AM(IMM) {
     return PC++;
 }
 
-/**
- * Zero Page \n
- * 2 byte
+/*
+ * 零页寻址
+ * 地址的高字节为固定 0，零页寻址的指令只需要 1 个字节的操作数，所以使用零页寻址的指令更省空间，执行更快。
+ * 但是这限制了它只能寻址内存空间的前 256 个字节（$0000 - $00FF）
+ *
+ * LDA   $12    ;将 $0012 地址处的值加载到 A
  */
 DECL_FUN_AM(ZP) {
-    return mem_read(PC++);
+    addr_t addr = mem_read(PC++);
+    return addr;
 }
 
 /**
@@ -159,13 +165,13 @@ DECL_FUN_AM(ZP) {
 DECL_FUN_AM(ZPX) {
     // The address calculation wraps around if the sum of the base address and the register exceed $FF
     // Using 8 bit save result
-    uint8_t addr = mem_read(PC++) + X;
+    addr_t addr = mem_read(PC++) + X;
     return addr;
 }
 
 DECL_FUN_AM(ZPY) {
     // Using 8 bit save result
-    uint8_t addr = mem_read(PC++) + Y;
+    addr_t addr = mem_read(PC++) + Y;
     return addr;
 }
 
@@ -177,10 +183,10 @@ DECL_FUN_AM(ZPY) {
  * byte of another 16 bit memory address which is the real target of the instruction.
  */
 DECL_FUN_AM(IND) {
-    uint16_t a_addr = mem_read16(PC);
+    addr_t a_addr = mem_read16(PC);
     PC += 2;
 
-    uint16_t addr;
+    addr_t addr;
     if ((a_addr & 0xFF) == 0xFF) {
         // page boundary
         addr = (mem_read(a_addr & 0xFF00) << 8) | mem_read(a_addr);
@@ -215,8 +221,8 @@ DECL_FUN_AM(IZX) {
  * LDA ($40),Y     ;Load a byte indirectly from memory
  */
 DECL_FUN_AM(IZY) {
-    uint16_t addr = mem_read16(mem_read(PC));
-    uint16_t addr_y = addr + Y;
+    addr_t addr = mem_read16(mem_read(PC));
+    addr_t addr_y = addr + Y;
     if (!is_same_page(addr, addr_y)) {
         ++CYCLES;
     }
@@ -229,7 +235,7 @@ DECL_FUN_AM(IZY) {
  * Instructions using absolute addressing contain a full 16 bit address to identify the target location.
  */
 DECL_FUN_AM(ABS) {
-    uint16_t addr = mem_read16(PC);
+    addr_t addr = mem_read16(PC);
     PC += 2;
     return addr;
 }
@@ -242,9 +248,9 @@ DECL_FUN_AM(ABS) {
  * by taking the 16 bit address from the instruction and added the contents of the X/Y register.
  */
 DECL_FUN_AM(ABX) {
-    uint16_t addr = mem_read16(PC);
+    addr_t addr = mem_read16(PC);
     PC += 2;
-    uint16_t addr_x = addr + X;
+    addr_t addr_x = addr + X;
     if (!is_same_page(addr, addr_x)) {
         ++CYCLES;
     }
@@ -252,9 +258,9 @@ DECL_FUN_AM(ABX) {
 }
 
 DECL_FUN_AM(ABY) {
-    uint16_t addr = mem_read16(PC);
+    addr_t addr = mem_read16(PC);
     PC += 2;
-    uint16_t addr_y = addr + Y;
+    addr_t addr_y = addr + Y;
     if (!is_same_page(addr, addr_y)) {
         ++CYCLES;
     }
@@ -268,9 +274,13 @@ DECL_FUN_AM(ABY) {
  * relative offset (e.g. -128 to +127) which is added to program counter if the condition is true.
  * As the program counter itself is incremented during instruction execution by two the effective address
  * range for the target instruction must be with -126 to +129 bytes of the branch.
+ *
+ * BEQ   $12
  */
 DECL_FUN_AM(REL) {
-    return PC++;
+    int8_t offset = mem_read(PC++);
+    // Branch addr
+    return PC + offset;
 }
 
 /**
@@ -315,18 +325,15 @@ DECL_FUN_OP(LDY) {
  * Stores the contents of the A/X/Y into memory.
  */
 DECL_FUN_OP(STA) {
-    uint8_t operand = mem_read_op_addr();
-    mem_write(operand, A);
+    mem_write(ARG_OP_ADDR, A);
 }
 
 DECL_FUN_OP(STX) {
-    uint8_t operand = mem_read_op_addr();
-    mem_write(operand, X);
+    mem_write(ARG_OP_ADDR, X);
 }
 
 DECL_FUN_OP(STY) {
-    uint8_t operand = mem_read_op_addr();
-    mem_write(operand, Y);
+    mem_write(ARG_OP_ADDR, Y);
 }
 
 
@@ -729,14 +736,13 @@ DECL_FUN_OP(JMP) {
     PC = ARG_OP_ADDR;
 }
 
-/**
- * JSR - Jump to Subroutine  \n
- * \n
- * The JSR instruction pushes the address (minus one) of the return point on to the stack \n
- * and then sets the program counter to the target memory address.
+/*
+ * JSR - Jump to Subroutine
+ *
+ * 将返回地址（减一）压入堆栈，然后将 PC 设置为目标内存地址。
  */
 DECL_FUN_OP(JSR) {
-    uint16_t return_addr = PC + 1;
+    addr_t return_addr = PC - 1;
     mem_push_stack16(return_addr);
     PC = ARG_OP_ADDR;
 }
@@ -773,15 +779,11 @@ DECL_FUN_OP(RTS) {
 __forceinline void branch_impl(DECL_ARG_CPU, DECL_ARG_ADDR, bool cond) {
     if (cond) {
         ++CYCLES;
-        // signed 8 bit relative offset
-        int8_t operand = mem_read_op_addr();
-        addr_t branch_addr = PC + operand;
-        if (!is_same_page(PC, branch_addr)) {
+        // ARG_OP_ADDR -> Branch addr
+        if (!is_same_page(PC, ARG_OP_ADDR)) {
             ++CYCLES;
         }
-        PC = branch_addr;
-    } else {
-        ++PC;
+        PC = ARG_OP_ADDR;
     }
 }
 
@@ -870,6 +872,7 @@ DECL_FUN_OP(SEI) {
  */
 DECL_FUN_OP(BRK) {
     set_flag(BREAK_COMMAND, true);
+
 }
 
 /**
@@ -895,7 +898,7 @@ DECL_FUN_OP(RTI) {
 typedef struct {
     void (* op_func)(cpu_t*, addr_t);
 
-    uint16_t (* am_func)(cpu_t*);
+    addr_t (* am_func)(cpu_t*);
 
     uint8_t cycles;
 } CpuOperation;
@@ -1160,26 +1163,43 @@ CpuOperation op_table[] = {
         {NULL, NULL}, // $FF
 };
 
-void cpu_reset(cpu_t* cpu) {
+
+static void cpu_interrupt_nmi(cpu_t* cpu) {
+    mem_push_stack16(PC);
+    set_flag(BREAK_COMMAND, BIT_FLAG_CLR);
+    set_flag(INTERRUPT_DISABLE, BIT_FLAG_SET);
+    mem_push_stack(P);
+    PC = mem_read16(VECTOR_NIM);
+    cpu->cycles = 8;
+}
+
+static void cpu_reset(cpu_t* cpu) {
     A = 0;
     X = 0;
     Y = 0;
     SP = 0xFD;
     PC = mem_read16(VECTOR_RESET);
+    CYCLES = 8;
 }
 
 #include <stdio.h>
 
+uint64_t cycle_count = 0;
+
 void cpu_cycle(cpu_t* cpu) {
     if (cpu->cycles == 0) {
 
-        uint8_t opcode = mem_read(PC++);
-        printf_s("opcode: %d, pc: #%x\n", opcode, PC);
-        CpuOperation operation = op_table[opcode];
+        if (cpu->nmi) {
+            cpu->nmi = false;
+            cpu_interrupt_nmi(cpu);
+        }
 
-        if (opcode == 16) {
+        uint8_t opcode = mem_read(PC++);
+        printf_s("opcode: %d, pc: %#x, cycle_count: %lld\n", opcode, PC, cycle_count);
+        if (cycle_count >= 102203) {
             int brk = 0;
         }
+        CpuOperation operation = op_table[opcode];
         if (operation.am_func) {
             cpu->cycles += operation.cycles;
 
@@ -1188,6 +1208,7 @@ void cpu_cycle(cpu_t* cpu) {
         }
     }
 
+    ++cycle_count;
     --cpu->cycles;
 }
 

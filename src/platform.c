@@ -19,6 +19,7 @@
 #else
 
 #include <unistd.h>
+#include <time.h>
 
 #define MSLEEP(MS) usleep(MS*1000)
 #define ACCESS access
@@ -60,7 +61,6 @@ wn_file_t* open_file(const char* filename, const char* mode) {
     return ret;
 }
 
-
 bool file_exists(const char* filename) {
     if (filename == NULL) {
         return false;
@@ -70,4 +70,15 @@ bool file_exists(const char* filename) {
 
 void wn_msleep(long millisecond) {
     MSLEEP(millisecond);
+}
+
+void wn_nano_sleep(long nanosecond) {
+#if defined(_WIN32) || defined(_WIN64)
+
+#else
+    struct timespec req, rem;
+    req.tv_sec = nanoseconds / 1000000000L;
+    req.tv_nsec = nanoseconds % 1000000000L;
+    nanosleep(&req, &rem);
+#endif
 }

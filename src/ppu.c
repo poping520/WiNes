@@ -3,21 +3,7 @@
 //
 
 #include "ppu.h"
-
-// 2KB Video RAM
-#define PPU_VRAM_SIZE (2*1024)
-
-#define NTSC_SCANLINE_COUNT 262
-
-typedef union {
-    struct {
-        uint16_t coarse_x: 5;
-        uint16_t coarse_y: 5;
-        uint8_t nametable_select: 2;
-        uint8_t find_y: 3;
-    };
-    uint16_t addr: 15;
-} inner_reg_t;
+#include "cpu.h"
 
 /*
  * PPU Memory Map
@@ -58,92 +44,6 @@ typedef union {
  * +----------------+-------------------~ $0000
  */
 
-struct ppu {
-
-    mapper_t* mapper;
-
-    uint32_t cycles;
-
-    // Video RAM
-    uint8_t vram[PPU_VRAM_SIZE];
-
-    // Object Attribute Memory
-    uint8_t oam[256];
-
-    uint8_t oam_addr;
-
-    //
-    // Rendering
-    //
-    uint16_t scanline;
-
-
-    //
-    // Memory-mapped registers
-    //
-
-    // Control register
-    union {
-        struct {
-            uint8_t nametable_addr: 2;
-            uint8_t vram_addr_increment: 1;
-            uint8_t a1: 1;
-            uint8_t a2: 1;
-            uint8_t a3: 1;
-            uint8_t sprite_size: 1;
-            uint8_t a4: 1;
-            uint8_t nmi_enable: 1;
-        };
-        uint8_t val;
-    } ctrl;
-
-    // Mask register
-    union {
-        struct {
-            uint8_t greyscale: 1;
-            uint8_t show_bgr_left8: 1;
-            uint8_t show_spr_left8: 1;
-            uint8_t show_bgr: 1;
-            uint8_t show_spr: 1;
-            uint8_t emphasize_red: 1;
-            uint8_t emphasize_green: 1;
-            uint8_t emphasize_blue: 1;
-        };
-        uint8_t val;
-    } mask;
-
-    union {
-        struct {
-            uint8_t open_bus: 5;
-            uint8_t spr_overflow: 1;
-            uint8_t spr_0_hit: 1;
-            uint8_t vblank_has_started: 1;
-        };
-        uint8_t val;
-    } status;
-
-    //
-    // Internal registers
-    //
-
-    // Current VRAM address (15 bits)
-    inner_reg_t reg_v;
-
-    // Temporary VRAM address (15 bits); can also be thought of as the address of the top left onscreen tile.
-    inner_reg_t reg_t;
-
-    // Fine X scroll (3 bits)
-    uint8_t reg_x: 3;
-
-    /*
-     * First or second write toggle (1 bit)
-     *
-     * Toggles on each write to either PPUSCROLL or PPUADDR, indicating whether this is the first or second write.
-     * Clears on reads of PPUSTATUS. Sometimes called the 'write latch' or 'write toggle'.
-     */
-    uint8_t reg_w: 1;
-};
-
 const uint32_t DEFAULT_PALETTES[64] = {
         // 00 -- 0F
         0x626262, 0x001FB2, 0x2404C8, 0x5200B2, 0x730076, 0x800024, 0x730B00, 0x522800,
@@ -163,8 +63,6 @@ const uint32_t DEFAULT_PALETTES[64] = {
 #define ARG_PPU         ppu
 #define DECL_ARG_PPU    ppu_t* ARG_PPU
 
-#define SCANLINE        (ARG_PPU->scanline)
-
 #define ppu_read(addr)          mapper_ppu_read(ARG_PPU->mapper, addr)
 #define ppu_write(addr, val)    mapper_ppu_write(ARG_PPU->mapper, addr, val)
 
@@ -176,25 +74,53 @@ uint32_t ppu_render(DECL_ARG_PPU) {
 }
 
 /*
+ * Scanline:
+ * PPU 每帧渲染 262 条 scanline，每条 scanline 持续 341 个 PPU 时钟周期，每个时钟周期产生一个像素
+ *
+ * Per-render scanline (-1 or 261)
+ *
+ * Visible scanlines (0-239)
+ *
+ * Post-render scanline (240)
+ *
+ * Vertical blanking lines (241-260)
+ *
  * DOC:
  * https://austinmorlan.com/posts/nes_rendering_overview/
  */
 void ppu_cycle(ppu_t* ppu) {
 
-    uint16_t cur_scanline = ppu->scanline;
+    int16_t scanline = ppu->scanline;
 
-    if (cur_scanline < 240) {
-        // scanline 0-239
+    if (scanline >= 0 && scanline <= 239) {
+        // [0, 239]
 
         ppu_render(ppu);
+    } else if (scanline == 240) {
+        // 240 do nothing
+    } else if (scanline <= 260) {
+        // vblank scanlines
+        // The VBlank flag of the PPU is set at tick 1 (the second tick) of scanline 241, where the VBlank NMI also occurs
+        // The PPU makes no memory accesses during these scanlines, so PPU memory can be freely accessed by the program.
+        if (scanline == 241 && ppu->tick == 1) {
+            ppu->status.vblank_started = BIT_FLAG_SET;
+            if (ppu->ctrl.nmi_enable) {
+                ppu->cpu->nmi = true;
+            }
+        }
     }
 
-    ++ppu->scanline;
-    if (ppu->scanline > NTSC_SCANLINE_COUNT) {
-        ppu->scanline = 0;
+    ++ppu->tick;
+    if (ppu->tick >= 341) {
+        ppu->tick = 0;
+
+        // After 341 ppu cycle, scanline +1
+        ++ppu->scanline;
+        if (ppu->scanline >= 261) {
+            ppu->scanline = -1;
+        }
     }
 }
-
 
 uint8_t ppu_reg_read(ppu_t* ppu, ppu_reg_t reg) {
     switch (reg) {
@@ -202,7 +128,7 @@ uint8_t ppu_reg_read(ppu_t* ppu, ppu_reg_t reg) {
             uint8_t ret = ppu->status.val;
             // Reading the status register will clear bit 7 mentioned above
             // and also the address latch used by PPUSCROLL and PPUADDR.
-            ppu->status.vblank_has_started = 0;
+            ppu->status.vblank_started = BIT_FLAG_CLR;
             ppu->reg_w = 0;
             return ret;
         }

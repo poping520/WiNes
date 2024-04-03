@@ -12,6 +12,9 @@ typedef uint16_t addr_t;
 
 typedef int err_t;
 
+#define BIT_FLAG_SET 0b1
+#define BIT_FLAG_CLR 0b0
+
 #define ERR_OK              0
 #define ERR_NULLPTR         1
 #define ERR_FILE_NOT_EXISTS 2

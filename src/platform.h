@@ -29,4 +29,6 @@ bool file_exists(const char* filename);
 
 void wn_msleep(long millisecond);
 
+void wn_nano_sleep(long nanosecond);
+
 #endif //WINES_PLATFORM_H

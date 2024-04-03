@@ -46,6 +46,8 @@ typedef struct cpu {
 
     uint8_t ram[CPU_RAM_SIZE];
 
+    bool nmi;
+
     // Program counter
     uint16_t pc;
 
