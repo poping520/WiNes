@@ -264,12 +264,13 @@ DECL_FUN_AM(ABY) {
 /**
  * Relative \n
  * \n
- * Relative addressing mode is used by branch instructions (e.g. BEQ, BNE, etc.)
+ * Relative addressing mode is used by branch instructions (e.g. BEQ, BNE, etc.) which contain a signed 8 bit
+ * relative offset (e.g. -128 to +127) which is added to program counter if the condition is true.
+ * As the program counter itself is incremented during instruction execution by two the effective address
+ * range for the target instruction must be with -126 to +129 bytes of the branch.
  */
 DECL_FUN_AM(REL) {
-    uint16_t addr = PC + mem_read(PC + 1) + 2;
-    ++PC;
-    return addr;
+    return PC++;
 }
 
 /**
@@ -529,23 +530,25 @@ DECL_FUN_OP(SBC) {
  * Carry Flag:      Set if A/X/Y >= M \n
  * Set Z, N Flags
  */
-__forceinline void cmp_impl(cpu_t* ARG_CPU, uint16_t ARG_OP_ADDR, uint8_t reg_val) {
+__forceinline void cmp_impl(DECL_ARG_CPU, DECL_ARG_ADDR, uint8_t reg_val) {
     uint8_t operand = mem_read_op_addr();
     uint8_t result = reg_val - operand;
     set_flag(CARRY_FLAG, reg_val >= operand);
     set_zn_flag(result);
 }
 
+#define cmp_with_reg(reg_val)  cmp_impl(ARG_CPU, ARG_OP_ADDR, reg_val)
+
 DECL_FUN_OP(CMP) {
-    cmp_impl(ARG_CPU, ARG_OP_ADDR, A);
+    cmp_with_reg(A);
 }
 
 DECL_FUN_OP(CPX) {
-    cmp_impl(ARG_CPU, ARG_OP_ADDR, X);
+    cmp_with_reg(X);
 }
 
 DECL_FUN_OP(CPY) {
-    cmp_impl(ARG_CPU, ARG_OP_ADDR, Y);
+    cmp_with_reg(Y);
 }
 
 #pragma mark Instruction Set - Increments & Decrements
@@ -767,22 +770,23 @@ DECL_FUN_OP(RTS) {
  * \n
  * If the C/Z/N/V Flag is clear/set then add the relative displacement to the program counter to cause a branch to a new location.
  */
-__forceinline void _branch(DECL_ARG_CPU, DECL_ARG_ADDR, bool cond) {
+__forceinline void branch_impl(DECL_ARG_CPU, DECL_ARG_ADDR, bool cond) {
     if (cond) {
         ++CYCLES;
-        uint8_t operand = mem_read_op_addr();
-        addr_t new_addr = PC + operand;
-        if (!is_same_page(PC, new_addr)) {
+        // signed 8 bit relative offset
+        int8_t operand = mem_read_op_addr();
+        addr_t branch_addr = PC + operand;
+        if (!is_same_page(PC, branch_addr)) {
             ++CYCLES;
         }
-        PC = new_addr;
+        PC = branch_addr;
     } else {
         ++PC;
     }
 }
 
-#define branch_if_set(flag) _branch(ARG_CPU, ARG_OP_ADDR, get_flag(flag) == CPU_FLAG_SET)
-#define branch_if_clr(flag) _branch(ARG_CPU, ARG_OP_ADDR, get_flag(flag) == CPU_FLAG_CLR)
+#define branch_if_set(flag) branch_impl(ARG_CPU, ARG_OP_ADDR, get_flag(flag) == CPU_FLAG_SET)
+#define branch_if_clr(flag) branch_impl(ARG_CPU, ARG_OP_ADDR, get_flag(flag) == CPU_FLAG_CLR)
 
 DECL_FUN_OP(BCC) {
     branch_if_clr(CARRY_FLAG);
@@ -889,7 +893,7 @@ DECL_FUN_OP(RTI) {
 }
 
 typedef struct {
-    void (* op_func)(cpu_t* cpu, uint16_t);
+    void (* op_func)(cpu_t*, addr_t);
 
     uint16_t (* am_func)(cpu_t*);
 
@@ -1170,13 +1174,17 @@ void cpu_cycle(cpu_t* cpu) {
     if (cpu->cycles == 0) {
 
         uint8_t opcode = mem_read(PC++);
+        printf_s("opcode: %d, pc: #%x\n", opcode, PC);
         CpuOperation operation = op_table[opcode];
 
+        if (opcode == 16) {
+            int brk = 0;
+        }
         if (operation.am_func) {
             cpu->cycles += operation.cycles;
-            uint8_t op_addr = operation.am_func(cpu);
+
+            addr_t op_addr = operation.am_func(cpu);
             operation.op_func(cpu, op_addr);
-            printf_s("opcode: %d\n", opcode);
         }
     }
 
