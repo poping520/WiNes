@@ -68,11 +68,11 @@ bool file_exists(const char* filename) {
     return ACCESS(filename, F_OK) != -1;
 }
 
-void wn_msleep(long millisecond) {
-    MSLEEP(millisecond);
+void wn_msleep(long milliseconds) {
+    MSLEEP(milliseconds);
 }
 
-void wn_nano_sleep(long nanosecond) {
+void wn_nano_sleep(long nanoseconds) {
 #if defined(_WIN32) || defined(_WIN64)
 
 #else

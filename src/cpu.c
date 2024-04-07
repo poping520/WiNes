@@ -20,7 +20,7 @@
 #define CPU_FLAG_SET 1
 #define CPU_FLAG_CLR 0
 
-__forceinline void fn_set_flag(cpu_t* cpu, enum CpuFlag flag, bool value) {
+FORCE_INLINE void fn_set_flag(cpu_t* cpu, enum CpuFlag flag, bool value) {
     if (value) {
         // 0001 0000 & 1110 0101 -> 1111 0101
         cpu->p |= flag;
@@ -30,7 +30,7 @@ __forceinline void fn_set_flag(cpu_t* cpu, enum CpuFlag flag, bool value) {
     }
 }
 
-__forceinline uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
+FORCE_INLINE uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
     // 0001_0000 & 0101_0101 -> 0001_0000
     // 0001_0000 & 0100_0101 -> 0000_0000
     return (cpu->p & flag) > 0 ? CPU_FLAG_SET : CPU_FLAG_CLR;
@@ -82,12 +82,12 @@ __forceinline uint8_t fn_get_flag(cpu_t* cpu, enum CpuFlag flag) {
 #define mem_push_stack(val)     mem_write((addr_t)(SP-- + STACK_BASE), val)
 #define mem_pop_stack()         mem_read((addr_t)(++SP + STACK_BASE))
 
-__forceinline void fn_mem_push_stack16(DECL_ARG_CPU, uint16_t val) {
+FORCE_INLINE void fn_mem_push_stack16(DECL_ARG_CPU, uint16_t val) {
     mem_push_stack((uint8_t) (val >> 8));
     mem_push_stack((uint8_t) val);
 }
 
-__forceinline uint16_t fn_mem_pop_stack16(DECL_ARG_CPU) {
+FORCE_INLINE uint16_t fn_mem_pop_stack16(DECL_ARG_CPU) {
     uint16_t low = mem_pop_stack();
     uint16_t high = mem_pop_stack();
     return (high << 8) | low;
@@ -505,7 +505,7 @@ DECL_FUN_OP(BIT) {
  */
 
 // ADC/SBC implements
-__forceinline void adc_impl(cpu_t* ARG_CPU, uint8_t operand) {
+FORCE_INLINE void adc_impl(cpu_t* ARG_CPU, uint8_t operand) {
     uint16_t sum = A + operand + get_flag(CARRY_FLAG);
     set_flag(OVERFLOW_FLAG, (~(A ^ operand) & (A ^ sum)) & 0x80);
 
@@ -540,7 +540,7 @@ DECL_FUN_OP(SBC) {
  * Carry Flag:      Set if A/X/Y >= M \n
  * Set Z, N Flags
  */
-__forceinline void cmp_impl(DECL_ARG_CPU, DECL_ARG_ADDR, uint8_t reg_val) {
+FORCE_INLINE void cmp_impl(DECL_ARG_CPU, DECL_ARG_ADDR, uint8_t reg_val) {
     uint8_t operand = mem_read_op_addr();
     uint8_t result = reg_val - operand;
     set_flag(CARRY_FLAG, reg_val >= operand);
@@ -638,7 +638,7 @@ DECL_FUN_OP(DEC) {
  * Carry Flag:      Set to contents of old bit 7 \n
  * Set Z,N Flags
  */
-__forceinline uint8_t asl_impl(DECL_ARG_CPU, uint8_t val) {
+FORCE_INLINE uint8_t asl_impl(DECL_ARG_CPU, uint8_t val) {
     uint8_t ret = val << 1;
     // old bit_7 -> CARRY
     set_flag(CARRY_FLAG, val >> 7);
@@ -664,7 +664,7 @@ DECL_FUN_OP(ASL) {
  * Carry Flag	Set to contents of old bit 0 \n
  * Set Z,N Flags
  */
-__forceinline uint8_t lsr_impl(DECL_ARG_CPU, uint8_t val) {
+FORCE_INLINE uint8_t lsr_impl(DECL_ARG_CPU, uint8_t val) {
     uint8_t ret = val >> 1;
     // old bit_0 -> CARRY
     set_flag(CARRY_FLAG, val & 0b1);
@@ -686,7 +686,7 @@ DECL_FUN_OP(LSR) {
  * Move each of the bits in either A or M one place to the left. \n
  * Bit 0 is filled with the current value of the carry flag whilst the old bit 7 becomes the new carry flag value.
  */
-__forceinline uint8_t rol_impl(DECL_ARG_CPU, uint8_t val) {
+FORCE_INLINE uint8_t rol_impl(DECL_ARG_CPU, uint8_t val) {
     // CARRY -> bit_0
     uint8_t result = (val << 1) | get_flag(CARRY_FLAG);
     // old bit_7 -> CARRY
@@ -709,7 +709,7 @@ DECL_FUN_OP(ROL) {
  * Move each of the bits in either A or M one place to the right. \n
  * Bit 7 is filled with the current value of the carry flag whilst the old bit 0 becomes the new carry flag value.
  */
-__forceinline uint8_t ror_impl(DECL_ARG_CPU, uint8_t val) {
+FORCE_INLINE uint8_t ror_impl(DECL_ARG_CPU, uint8_t val) {
     // CARRY -> bit_7
     uint8_t result = (val >> 1) | (get_flag(CARRY_FLAG) << 7);
     // old bit_0 -> CARRY
@@ -779,7 +779,7 @@ DECL_FUN_OP(RTS) {
  * \n
  * If the C/Z/N/V Flag is clear/set then add the relative displacement to the program counter to cause a branch to a new location.
  */
-__forceinline void branch_impl(DECL_ARG_CPU, DECL_ARG_ADDR, bool cond) {
+FORCE_INLINE void branch_impl(DECL_ARG_CPU, DECL_ARG_ADDR, bool cond) {
     if (cond) {
         ++CYCLES;
         // ARG_OP_ADDR -> Branch addr
@@ -1198,7 +1198,7 @@ void cpu_cycle(cpu_t* cpu) {
         }
 
         uint8_t opcode = mem_read_pc();
-        printf_s("opcode: %d, pc: %#x, cycle_count: %lld\n", opcode, PC, cycle_count);
+        printf("opcode: %d, pc: %#x, cycle_count: %lld\n", opcode, PC, cycle_count);
         CpuOperation operation = op_table[opcode];
         if (operation.am_func) {
             cpu->cycles += operation.cycles;

@@ -8,6 +8,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#if defined(__GNUC__)
+#include <stddef.h>
+#define FORCE_INLINE __attribute__((always_inline)) inline
+#elif defined(_MSC_VER)
+#define FORCE_INLINE __froce_inline
+#else
+#define FORCE_INLINE inline
+#endif
+
+
 typedef uint16_t addr_t;
 
 typedef int err_t;
