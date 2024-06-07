@@ -2,6 +2,8 @@
 // Created by WangKZ on 2024/3/28.
 //
 
+#include <stdio.h>
+
 #include "ppu.h"
 #include "cpu.h"
 
@@ -70,9 +72,20 @@ const uint32_t DEFAULT_PALETTES[64] = {
 
 uint32_t ppu_render(DECL_ARG_PPU) {
 
+    // Background rendering
     if (ppu->mask.show_bgr) {
         uint8_t tile_idx = ppu_read(ppu->reg_v.addr);
     }
+
+    // Sprite rendering
+    if (ppu->mask.show_spr) {
+
+    }
+
+    uint8_t bgr_color_idx = ppu_read(0x3F00);
+    printf("idx: %d\n", bgr_color_idx);
+
+
 }
 
 /*
@@ -82,7 +95,6 @@ uint32_t ppu_render(DECL_ARG_PPU) {
  * Per-render scanline (-1 or 261)
  *
  * Visible scanlines (0-239)
- *
  *
  * Post-render scanline (240)
  *

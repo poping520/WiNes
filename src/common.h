@@ -8,6 +8,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#if defined(__APPLE__)
+#include <stdlib.h>
+#else
+#include <malloc.h>
+#endif
+
 #if defined(__GNUC__)
 #include <stddef.h>
 #define FORCE_INLINE __attribute__((always_inline)) inline

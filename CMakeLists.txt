@@ -3,9 +3,10 @@ project(WiNes C)
 
 set(CMAKE_C_STANDARD 11)
 
+find_package(SDL2 REQUIRED)
 
 add_executable(
-        WiNes
+        ${PROJECT_NAME}
         src/main.c
         src/common.h
         src/cpu.h
@@ -23,7 +24,6 @@ add_executable(
         src/wines.c
         src/mappers/mapper0_nrom.h
 )
-
 
 #set(SDL2_DIR ${CMAKE_CURRENT_LIST_DIR}/external/SDL2-2.30.1/cmake)
 #find_package(SDL2 REQUIRED)

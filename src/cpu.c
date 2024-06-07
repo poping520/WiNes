@@ -6,9 +6,7 @@
 #include "mapper.h"
 #include "ppu.h"
 
-#include <malloc.h>
 #include <stdbool.h>
-
 
 #define STACK_BASE      0x100
 

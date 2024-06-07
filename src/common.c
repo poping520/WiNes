@@ -2,7 +2,7 @@
 // Created by WangKZ on 2024/4/1.
 //
 
-#include <malloc.h>
+#include "common.h"
 
 void* wn_malloc(size_t size) {
     return malloc(size);
